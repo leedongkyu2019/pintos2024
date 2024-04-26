@@ -143,5 +143,5 @@ int thread_get_load_avg (void);
 void thread_sleep(int64_t ticks);
 void thread_wakeup(int64_t ticks);
 bool wakeup_tick_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-
+bool thread_compare_priority (struct list_elem *l, struct list_elem *s, void *aux UNUSED);
 #endif /* threads/thread.h */
