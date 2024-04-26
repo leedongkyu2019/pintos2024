@@ -139,6 +139,9 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+/* Functions to add*/
+void thread_sleep(int64_t ticks);
+void thread_wakeup();
 bool wakeup_tick_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 #endif /* threads/thread.h */

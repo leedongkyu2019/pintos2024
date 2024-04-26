@@ -604,8 +604,7 @@ void thread_wakeup() {
   }
 }
 
-bool
-wakeup_tick_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+bool wakeup_tick_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
   struct thread *a_thread = list_entry(a, struct thread, elem);
   struct thread *b_thread = list_entry(b, struct thread, elem);
