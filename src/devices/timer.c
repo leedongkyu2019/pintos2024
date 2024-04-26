@@ -174,7 +174,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
    move them to the ready list if necessary.
    update the global tick.
    */
-  thread_wakeup();
+  thread_wakeup(ticks);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
