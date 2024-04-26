@@ -633,3 +633,10 @@ bool thread_compare_priority (struct list_elem *l, struct list_elem *s, void *au
     return list_entry (l, struct thread, elem)->priority
          > list_entry (s, struct thread, elem)->priority;
 }
+void thread_test_preemption () {
+  if (!list_empty(&ready_list)) {
+    if (thread_current() -> priority < list_entry (list_front (&ready_list), struct thread, elem)->priority) {
+      thread_yield();
+    }
+  }
+}

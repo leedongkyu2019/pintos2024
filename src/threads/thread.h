@@ -144,4 +144,5 @@ void thread_sleep(int64_t ticks);
 void thread_wakeup(int64_t ticks);
 bool wakeup_tick_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 bool thread_compare_priority (struct list_elem *l, struct list_elem *s, void *aux UNUSED);
+void thread_test_preemption ();
 #endif /* threads/thread.h */
