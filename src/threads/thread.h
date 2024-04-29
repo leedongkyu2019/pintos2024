@@ -94,10 +94,10 @@ struct thread
     struct list_elem elem;              /* List element. */
     
     int64_t wakeup_tick;
-    int64_t init_priority;
+    int64_t origin_priority;
     struct lock *wait_on_lock;
     struct list donations;
-    struct list_elem donation_elem;
+    struct list_elem d_elem;
 
 
 #ifdef USERPROG
@@ -146,13 +146,13 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 /* Functions to add*/
-void thread_sleep(int64_t ticks);
-void thread_wakeup(int64_t ticks);
-bool wakeup_tick_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-bool thread_compare_priority (struct list_elem *l, struct list_elem *s, void *aux UNUSED);
-void thread_test_preemption ();
-void donate_priority (void);
-bool thread_compare_donate_priority (const struct list_elem *l, const struct list_elem *s, void *aux UNUSED);
-void remove_with_lock (struct lock *lock);
-void refresh_priority (void);
+void thread_sleep(int64_t);
+void thread_wakeup(int64_t);
+bool wakeup_tick_compare(const struct list_elem *, const struct list_elem *, void *aux);
+bool thread_priority_compare (struct list_elem *, struct list_elem *, void *aux);
+void preemption();
+void donate_priority();
+bool donations_priority_compare(const struct list_elem *, const struct list_elem *, void *aux);
+void remove_donation_elem(struct lock *);
+void set_cur_priority();
 #endif /* threads/thread.h */
