@@ -639,10 +639,9 @@ bool thread_priority_compare (struct list_elem *a, struct list_elem *b, void *au
 }
 
 void preemption () {
-  if (!list_empty(&ready_list)) {
-    if (thread_current() -> priority < list_entry (list_front (&ready_list), struct thread, elem)->priority) {
-      thread_yield();
-    }
+  if (!list_empty(&ready_list) &&
+  thread_current()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority) {
+    thread_yield();
   }
 }
 
@@ -686,8 +685,8 @@ void set_cur_priority ()
   if (!list_empty (&cur_thread->donations)) {
     list_sort (&cur_thread->donations, donations_priority_compare, 0);
 
-    struct thread *front = list_entry(list_front (&cur_thread->donations), struct thread, d_elem);
-    if (front->priority > cur_thread->priority)
-      cur_thread->priority = front->priority;
+    struct thread *highest_thread = list_entry(list_front (&cur_thread->donations), struct thread, d_elem);
+    if (highest_thread->priority > cur_thread->priority)
+      cur_thread->priority = highest_thread->priority;
   }
 }
