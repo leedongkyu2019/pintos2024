@@ -651,8 +651,9 @@ void donate_priority ()
 
   while(cur_thread->wait_on_lock) {
     struct thread *holder = cur_thread->wait_on_lock->holder;
-    if (cur_thread->priority > holder->priority)
-      holder->priority = cur_thread->priority;
+    if (holder == NULL || cur_thread->priority <= holder->priority) break;
+
+    holder->priority = cur_thread->priority;
     cur_thread = holder;
   }
 }
