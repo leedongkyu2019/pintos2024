@@ -199,6 +199,12 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  if (thread_mlfqs) {
+    sema_down (&lock->semaphore);
+    lock->holder = thread_current ();
+    return;
+  }
+
   struct thread *cur_thread = thread_current ();
   if (lock->holder) { // if lock is not available
     cur_thread->wait_on_lock = lock;
@@ -243,8 +249,10 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  remove_donation_elem(lock);
-  set_cur_priority();
+  if (!thread_mlfqs) {
+    remove_donation_elem(lock);
+    set_cur_priority();
+  }
   
   lock->holder = NULL;
   sema_up (&lock->semaphore);
@@ -352,8 +360,7 @@ cond_broadcast (struct condition *cond, struct lock *lock)
     cond_signal (cond, lock);
 }
 
-bool sema_priority_compare (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
-{
+bool sema_priority_compare (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
 	struct semaphore_elem *sema_a = list_entry (a, struct semaphore_elem, elem);
 	struct semaphore_elem *sema_b = list_entry (b, struct semaphore_elem, elem);
 
