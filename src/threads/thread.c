@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fixed-point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -98,8 +99,6 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-
-  load_avg = 0;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -111,6 +110,8 @@ thread_start (void)
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
+
+  load_avg = 0;
 
   /* Start preemptive thread scheduling. */
   intr_enable ();
@@ -381,14 +382,14 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  return fp_to_int_round(mul_fp_by_int(load_avg, 100));
+  return fp_to_int_nearest(mul_fp_by_int(load_avg, 100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  return fp_to_int_round(mul_fp_by_int(thread_current()->recent_cpu, 100));
+  return fp_to_int_nearest(mul_fp_by_int(thread_current()->recent_cpu, 100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -700,7 +701,7 @@ void set_cur_priority () {
 void update_priority (struct thread *t, void *aux UNUSED) {
   if (t == idle_thread) return;
   
-  t->priority = PRI_MAX - fp_to_int_round(div_fp_by_int(t->recent_cpu, 4)) - t->nice * 2;
+  t->priority = PRI_MAX - fp_to_int_nearest(div_fp_by_int(t->recent_cpu, 4)) - t->nice * 2;
   if (t->priority > PRI_MAX) t->priority = PRI_MAX;
   if (t->priority < PRI_MIN) t->priority = PRI_MIN;
 }
@@ -729,48 +730,4 @@ void recalculate_priority () {
 
 void recalculate_recent_cpu () {
   thread_foreach(update_recent_cpu, NULL);
-}
-
-int int_to_fp (int n) {
-  return n * F;
-}
-
-int fp_to_int (int x) {
-  return x / F;
-}
-
-int fp_to_int_round (int x) {
-  return x >= 0 ? (x + F / 2) / F : (x - F / 2) / F;
-}
-
-int add_fp (int x, int y) {
-  return x + y;
-}
-
-int add_fp_by_int (int x, int n) {
-  return x + n * F;
-}
-
-int sub_fp (int x, int y) {
-  return x - y;
-}
-
-int sub_fp_by_int (int x, int n) {
-  return x - n * F;
-}
-
-int mul_fp (int x, int y) {
-  return ((int64_t) x) * y / F;
-}
-
-int mul_fp_by_int (int x, int n) {
-  return x * n;
-}
-
-int div_fp (int x, int y) {
-  return ((int64_t) x) * F / y;
-}
-
-int div_fp_by_int (int x, int n) {
-  return x / n;
 }

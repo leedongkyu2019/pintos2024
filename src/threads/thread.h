@@ -167,15 +167,4 @@ void update_load_avg ();
 void increase_recent_cpu ();
 void recalculate_priority ();
 void recalculate_recent_cpu ();
-int int_to_fp (int);
-int fp_to_int (int);
-int fp_to_int_round (int);
-int add_fp (int, int);
-int add_fp_by_int (int, int);
-int sub_fp (int, int);
-int sub_fp_by_int (int, int);
-int mul_fp (int, int);
-int div_fp (int, int);
-int mul_fp_by_int (int, int);
-int div_fp_by_int (int, int);
 #endif /* threads/thread.h */
