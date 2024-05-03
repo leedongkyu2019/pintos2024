@@ -111,7 +111,7 @@ thread_start (void)
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
 
-  load_avg = 0;
+  load_avg = LOAD_AVG_DEFAULT;
 
   /* Start preemptive thread scheduling. */
   intr_enable ();
@@ -208,6 +208,7 @@ thread_create (const char *name, int priority,
       thread_yield();
     }
   }
+  // preemption();
   return tid;
 }
 
@@ -345,9 +346,9 @@ thread_set_priority (int new_priority)
   if (thread_mlfqs) return;
   struct thread *cur_thread = thread_current();
   cur_thread->origin_priority = new_priority;
-  set_cur_priority(cur_thread);
+  set_cur_priority();
   
-  list_sort(&ready_list, &thread_priority_compare, NULL);
+  // list_sort(&ready_list, &thread_priority_compare, NULL);
 
   preemption();
 }
@@ -484,8 +485,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->wait_on_lock = NULL;
   list_init(&t->donations);
 
-  t->nice = 0;
-  t->recent_cpu = 0;
+  t->nice = NICE_DEFAULT;
+  t->recent_cpu = RECENT_CPU_DEFAULT;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -607,32 +608,44 @@ allocate_tid (void)
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 void thread_sleep(int64_t ticks) {
+
+  enum intr_level old_level = intr_disable();
   struct thread * cur_thread = thread_current();
   ASSERT (cur_thread != idle_thread);
 
-  enum intr_level old_level = intr_disable();
   cur_thread->wakeup_tick = ticks;
+
   list_push_back (&sleep_list, &cur_thread->elem);
-  cur_thread->status = THREAD_BLOCKED;
-  schedule();
+  thread_block();
+  // cur_thread->status = THREAD_BLOCKED;
+  // schedule();
   intr_set_level (old_level);
 
 }
 void thread_wakeup(int64_t ticks) {
-  struct list_elem *next_elem;
-  struct list_elem *current_elem = list_begin(&sleep_list);
-  list_sort(&sleep_list, &wakeup_tick_compare, NULL);
-  while (current_elem != list_end(&sleep_list)) {
-      struct thread *t = list_entry(current_elem, struct thread, elem);
+  // struct list_elem *next_elem;
+  // struct list_elem *current_elem = list_begin(&sleep_list);
+  // // list_sort(&sleep_list, &wakeup_tick_compare, NULL);
+  // while (current_elem != list_end(&sleep_list)) {
+  //     struct thread *t = list_entry(current_elem, struct thread, elem);
+  //     next_elem = list_next(current_elem);
+  //     if (t->wakeup_tick <= ticks) {
+  //         list_remove(current_elem);
+  //         thread_unblock(t);
+  //     }
 
-      next_elem = list_next(current_elem);
+  //     current_elem = next_elem;
+  // }
+  struct list_elem *e = list_begin (&sleep_list);
 
-      if (t->wakeup_tick <= ticks) {
-          list_remove(current_elem);
-          thread_unblock(t);
-      }
-
-      current_elem = next_elem;
+  while (e != list_end (&sleep_list)){
+    struct thread *t = list_entry (e, struct thread, elem);
+    if (t->wakeup_tick <= ticks){
+      e = list_remove (e);
+      thread_unblock (t);
+    }
+    else 
+      e = list_next (e);
   }
 }
 
@@ -700,17 +713,18 @@ void set_cur_priority () {
 /*mlfqs functions*/
 void update_priority (struct thread *t, void *aux UNUSED) {
   if (t == idle_thread) return;
+  t->priority = fp_to_int (add_fp_by_int (div_fp_by_int (t->recent_cpu, -4), PRI_MAX - t->nice * 2));
   
-  t->priority = PRI_MAX - fp_to_int_nearest(div_fp_by_int(t->recent_cpu, 4)) - t->nice * 2;
-  if (t->priority > PRI_MAX) t->priority = PRI_MAX;
-  if (t->priority < PRI_MIN) t->priority = PRI_MIN;
+  // t->priority = PRI_MAX - fp_to_int_nearest(div_fp_by_int(t->recent_cpu, 4)) - t->nice * 2;
+  // if (t->priority > PRI_MAX) t->priority = PRI_MAX;
+  // if (t->priority < PRI_MIN) t->priority = PRI_MIN;
 }
 
 void update_recent_cpu (struct thread *t, void *aux UNUSED) {
   if (t == idle_thread) return;
-
-  int decay = div_fp(mul_fp_by_int(load_avg, 2), add_fp_by_int(mul_fp_by_int(load_avg, 2), 1));
-  t->recent_cpu = add_fp_by_int(mul_fp(decay, t->recent_cpu), t->nice);
+  t->recent_cpu = add_fp_by_int (mul_fp (div_fp (mul_fp_by_int (load_avg, 2), add_fp_by_int (mul_fp_by_int (load_avg, 2), 1)), t->recent_cpu), t->nice);
+  // int decay = div_fp(mul_fp_by_int(load_avg, 2), add_fp_by_int(mul_fp_by_int(load_avg, 2), 1));
+  // t->recent_cpu = add_fp_by_int(mul_fp(decay, t->recent_cpu), t->nice);
 }
 
 void update_load_avg () {

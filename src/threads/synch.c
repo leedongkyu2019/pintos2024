@@ -248,13 +248,16 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-
-  if (!thread_mlfqs) {
-    remove_donation_elem(lock);
-    set_cur_priority();
-  }
   
   lock->holder = NULL;
+  if (thread_mlfqs) {
+    sema_up (&lock->semaphore);
+    return ;
+  }
+
+  remove_donation_elem(lock);
+  set_cur_priority();
+  
   sema_up (&lock->semaphore);
 }
 /* Returns true if the current thread holds LOCK, false
