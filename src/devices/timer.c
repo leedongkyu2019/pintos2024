@@ -168,15 +168,15 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
-  // 조건 위치 및 recentcpu와 loadavg실행순서 변경
+
   if (thread_mlfqs) {
     increase_recent_cpu();
     if (ticks % 4 == 0) {
       recalculate_priority();
-      if (ticks % TIMER_FREQ == 0) {
-        recalculate_recent_cpu();
-        update_load_avg();
-      }
+    }
+    if (ticks % TIMER_FREQ == 0) {
+      recalculate_recent_cpu();
+      update_load_avg();
     }
   }
   thread_wakeup(ticks);

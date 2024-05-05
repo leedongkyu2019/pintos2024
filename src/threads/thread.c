@@ -693,23 +693,19 @@ void set_cur_priority () {
 void update_priority (struct thread *t, void *aux UNUSED) {
   if (t == idle_thread) return;
   t->priority = fp_to_int (add_fp_by_int (div_fp_by_int (t->recent_cpu, -4), PRI_MAX - t->nice * 2));
-  
-  // t->priority = PRI_MAX - fp_to_int_nearest(div_fp_by_int(t->recent_cpu, 4)) - t->nice * 2;
-  // if (t->priority > PRI_MAX) t->priority = PRI_MAX;
-  // if (t->priority < PRI_MIN) t->priority = PRI_MIN;
 }
 
 void update_recent_cpu (struct thread *t, void *aux UNUSED) {
   if (t == idle_thread) return;
-  t->recent_cpu = add_fp_by_int (mul_fp (div_fp (mul_fp_by_int (load_avg, 2), add_fp_by_int (mul_fp_by_int (load_avg, 2), 1)), t->recent_cpu), t->nice);
-  // int decay = div_fp(mul_fp_by_int(load_avg, 2), add_fp_by_int(mul_fp_by_int(load_avg, 2), 1));
-  // t->recent_cpu = add_fp_by_int(mul_fp(decay, t->recent_cpu), t->nice);
+
+  int decay = div_fp(mul_fp_by_int(load_avg, 2), add_fp_by_int(mul_fp_by_int(load_avg, 2), 1));
+  t->recent_cpu = add_fp_by_int(mul_fp(decay, t->recent_cpu), t->nice);
 }
 
 void update_load_avg () {
-  int ready_threads = list_size(&ready_list);
-  if (thread_current() != idle_thread) ready_threads++;
-  load_avg = add_fp(mul_fp(div_fp(int_to_fp(59), int_to_fp(60)), load_avg), mul_fp_by_int(div_fp(int_to_fp(1), int_to_fp(60)), ready_threads));
+  int n_readies = list_size(&ready_list);
+  if (thread_current() != idle_thread) n_readies++;
+  load_avg = add_fp(mul_fp(div_fp(int_to_fp(59), int_to_fp(60)), load_avg), mul_fp_by_int(div_fp(int_to_fp(1), int_to_fp(60)), n_readies));
 }
 
 void increase_recent_cpu () {
