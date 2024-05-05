@@ -203,12 +203,7 @@ thread_create (const char *name, int priority,
   sf->ebp = 0;
   /* Add to run queue. */
   thread_unblock (t);
-  if (!list_empty(&ready_list)) {
-    if (thread_current() -> priority < list_entry (list_front (&ready_list), struct thread, elem)->priority) {
-      thread_yield();
-    }
-  }
-  // preemption();
+  preemption();
   return tid;
 }
 
@@ -347,9 +342,6 @@ thread_set_priority (int new_priority)
   struct thread *cur_thread = thread_current();
   cur_thread->origin_priority = new_priority;
   set_cur_priority();
-  
-  // list_sort(&ready_list, &thread_priority_compare, NULL);
-
   preemption();
 }
 
@@ -617,35 +609,21 @@ void thread_sleep(int64_t ticks) {
 
   list_push_back (&sleep_list, &cur_thread->elem);
   thread_block();
-  // cur_thread->status = THREAD_BLOCKED;
-  // schedule();
   intr_set_level (old_level);
 
 }
 void thread_wakeup(int64_t ticks) {
-  // struct list_elem *next_elem;
-  // struct list_elem *current_elem = list_begin(&sleep_list);
-  // // list_sort(&sleep_list, &wakeup_tick_compare, NULL);
-  // while (current_elem != list_end(&sleep_list)) {
-  //     struct thread *t = list_entry(current_elem, struct thread, elem);
-  //     next_elem = list_next(current_elem);
-  //     if (t->wakeup_tick <= ticks) {
-  //         list_remove(current_elem);
-  //         thread_unblock(t);
-  //     }
+  struct list_elem *next_elem;
+  struct list_elem *current_elem = list_begin(&sleep_list);
+  while (current_elem != list_end(&sleep_list)) {
+      struct thread *t = list_entry(current_elem, struct thread, elem);
+      next_elem = list_next(current_elem);
+      if (t->wakeup_tick <= ticks) {
+          list_remove(current_elem);
+          thread_unblock(t);
+      }
 
-  //     current_elem = next_elem;
-  // }
-  struct list_elem *e = list_begin (&sleep_list);
-
-  while (e != list_end (&sleep_list)){
-    struct thread *t = list_entry (e, struct thread, elem);
-    if (t->wakeup_tick <= ticks){
-      e = list_remove (e);
-      thread_unblock (t);
-    }
-    else 
-      e = list_next (e);
+      current_elem = next_elem;
   }
 }
 
@@ -661,10 +639,11 @@ bool thread_priority_compare (struct list_elem *a, struct list_elem *b, void *au
 }
 
 void preemption () {
-  if (!list_empty(&ready_list) &&
-  thread_current()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority) {
+  if (list_empty(&ready_list)) return;
+  if (thread_current() -> priority < list_entry (list_front (&ready_list), struct thread, elem)->priority) {
     thread_yield();
   }
+  
 }
 
 void donate_priority () {
@@ -701,13 +680,13 @@ void set_cur_priority () {
   struct thread *cur_thread = thread_current();
   cur_thread->priority = cur_thread->origin_priority;
 
-  if (!list_empty (&cur_thread->donations)) {
-    list_sort (&cur_thread->donations, donations_priority_compare, 0);
+  if (list_empty (&cur_thread->donations)) return;
 
-    struct thread *highest_thread = list_entry(list_front (&cur_thread->donations), struct thread, d_elem);
-    if (highest_thread->priority > cur_thread->priority)
-      cur_thread->priority = highest_thread->priority;
-  }
+  list_sort (&cur_thread->donations, donations_priority_compare, 0);
+
+  struct thread *highest_thread = list_entry(list_front (&cur_thread->donations), struct thread, d_elem);
+  if (highest_thread->priority > cur_thread->priority)
+    cur_thread->priority = highest_thread->priority;
 }
 
 /*mlfqs functions*/
