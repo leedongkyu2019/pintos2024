@@ -647,15 +647,16 @@ void preemption () {
 }
 
 void donate_priority () {
-  struct thread *cur_thread = thread_current ();
-
-  while(cur_thread->wait_on_lock) {
-    struct thread *holder = cur_thread->wait_on_lock->holder;
-    if (holder == NULL || cur_thread->priority <= holder->priority) break;
-
-    holder->priority = cur_thread->priority;
-    cur_thread = holder;
-  }
+  struct thread *holder = thread_current()->wait_on_lock->holder;
+	int count = 0;
+	while (holder != NULL)
+	{
+		holder->priority = thread_current()->priority;
+		count++;
+		if (count > 8 || holder->wait_on_lock == NULL)
+			break;
+		holder = holder->wait_on_lock->holder;
+	}
 }
 
 bool donations_priority_compare (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
