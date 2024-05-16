@@ -206,11 +206,19 @@ lock_acquire (struct lock *lock)
   }
 
   struct thread *cur_thread = thread_current ();
-  if (lock->holder) { // if lock is not available
+
+  if (lock->holder) {
     cur_thread->wait_on_lock = lock;
     list_insert_ordered (&lock->holder->donations, &cur_thread->d_elem, donations_priority_compare, 0);
-    
-    donate_priority ();
+    struct thread *cur_thread = thread_current ();
+
+    while(cur_thread->wait_on_lock) {
+      struct thread *holder = cur_thread->wait_on_lock->holder;
+      if (holder == NULL || cur_thread->priority <= holder->priority) break;
+
+      holder->priority = cur_thread->priority;
+      cur_thread = holder;
+    }    
   }
 
   sema_down (&lock->semaphore);
@@ -255,7 +263,16 @@ lock_release (struct lock *lock)
     return ;
   }
 
-  remove_donation_elem(lock);
+  struct thread *cur_thread = thread_current ();
+  struct list_elem *e = list_begin(&cur_thread->donations);
+
+  while(e != list_end(&cur_thread-> donations)) {
+    struct thread *thread = list_entry(e, struct thread, d_elem);
+    if (thread->wait_on_lock == lock) list_remove(&thread->d_elem);
+
+    e = list_next(e);
+  }
+  
   set_cur_priority();
   
   sema_up (&lock->semaphore);

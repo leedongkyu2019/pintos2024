@@ -11,7 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#include "threads/fixed-point.h"
+#include "threads/fixed_point.h"
 
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -607,8 +607,8 @@ void thread_sleep(int64_t ticks) {
   ASSERT (cur_thread != idle_thread);
 
   cur_thread->wakeup_tick = ticks;
-
-  list_push_back (&sleep_list, &cur_thread->elem);
+  list_insert_ordered(&sleep_list, &cur_thread->elem, wakeup_tick_compare, NULL);
+  // list_push_back (&sleep_list, &cur_thread->elem);
   thread_block();
   intr_set_level (old_level);
 
@@ -622,6 +622,8 @@ void thread_wakeup(int64_t ticks) {
       if (t->wakeup_tick <= ticks) {
           list_remove(current_elem);
           thread_unblock(t);
+      } else {
+        break;
       }
 
       current_elem = next_elem;
@@ -647,35 +649,9 @@ void preemption (void) {
   
 }
 
-void donate_priority (void) {
-  struct thread *holder = thread_current()->wait_on_lock->holder;
-	int count = 0;
-	while (holder != NULL)
-	{
-		holder->priority = thread_current()->priority;
-		count++;
-		if (count > 8 || holder->wait_on_lock == NULL)
-			break;
-		holder = holder->wait_on_lock->holder;
-	}
-}
-
 bool donations_priority_compare (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
 	return list_entry (a, struct thread, d_elem)->priority
 		 > list_entry (b, struct thread, d_elem)->priority;
-}
-
-
-void remove_donation_elem (struct lock *lock) {
-  struct thread *cur_thread = thread_current ();
-  struct list_elem *e = list_begin(&cur_thread->donations);
-
-  while(e != list_end(&cur_thread-> donations)) {
-    struct thread *thread = list_entry(e, struct thread, d_elem);
-    if (thread->wait_on_lock == lock) list_remove(&thread->d_elem);
-
-    e = list_next(e);
-  }
 }
 
 void set_cur_priority (void) {
@@ -721,4 +697,4 @@ void recalculate_priority (void) {
 
 void recalculate_recent_cpu (void) {
   thread_foreach(update_recent_cpu, NULL);
-}
+} 
