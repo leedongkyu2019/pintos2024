@@ -11,7 +11,8 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#include "threads/fixed-point.h"
+#include "threads/fixed_point.h"
+
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -638,7 +639,7 @@ bool thread_priority_compare (struct list_elem *a, struct list_elem *b, void *au
          > list_entry (b, struct thread, elem)->priority;
 }
 
-void preemption () {
+void preemption (void) {
   if (list_empty(&ready_list)) return;
   if (thread_current() -> priority < list_entry (list_front (&ready_list), struct thread, elem)->priority) {
     thread_yield();
@@ -646,7 +647,7 @@ void preemption () {
   
 }
 
-void donate_priority () {
+void donate_priority (void) {
   struct thread *holder = thread_current()->wait_on_lock->holder;
 	int count = 0;
 	while (holder != NULL)
@@ -677,7 +678,7 @@ void remove_donation_elem (struct lock *lock) {
   }
 }
 
-void set_cur_priority () {
+void set_cur_priority (void) {
   struct thread *cur_thread = thread_current();
   cur_thread->priority = cur_thread->origin_priority;
 
@@ -703,21 +704,21 @@ void update_recent_cpu (struct thread *t, void *aux UNUSED) {
   t->recent_cpu = add_fp_by_int(mul_fp(decay, t->recent_cpu), t->nice);
 }
 
-void update_load_avg () {
+void update_load_avg (void) {
   int n_readies = list_size(&ready_list);
   if (thread_current() != idle_thread) n_readies++;
   load_avg = add_fp(mul_fp(div_fp(int_to_fp(59), int_to_fp(60)), load_avg), mul_fp_by_int(div_fp(int_to_fp(1), int_to_fp(60)), n_readies));
 }
 
-void increase_recent_cpu () {
+void increase_recent_cpu (void) {
   struct thread *cur_thread = thread_current();
   if (cur_thread != idle_thread) cur_thread->recent_cpu = add_fp_by_int(cur_thread->recent_cpu, 1);
 }
 
-void recalculate_priority () {
+void recalculate_priority (void) {
   thread_foreach(update_priority, NULL);
 }
 
-void recalculate_recent_cpu () {
+void recalculate_recent_cpu (void) {
   thread_foreach(update_recent_cpu, NULL);
 }
