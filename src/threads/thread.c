@@ -112,7 +112,7 @@ thread_start (void)
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
 
-  load_avg = LOAD_AVG_DEFAULT;
+  load_avg = 0;
 
   /* Start preemptive thread scheduling. */
   intr_enable ();
@@ -478,8 +478,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->wait_on_lock = NULL;
   list_init(&t->donations);
 
-  t->nice = NICE_DEFAULT;
-  t->recent_cpu = RECENT_CPU_DEFAULT;
+  t->nice = 0;
+  t->recent_cpu = 0;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
