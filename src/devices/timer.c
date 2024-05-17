@@ -175,8 +175,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
       recalculate_priority();
     }
     if (ticks % TIMER_FREQ == 0) {
-      recalculate_recent_cpu();
       update_load_avg();
+      recalculate_recent_cpu();
     }
   }
   thread_wakeup(ticks);

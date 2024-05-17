@@ -260,10 +260,10 @@ lock_release (struct lock *lock)
   lock->holder = NULL;
   if (thread_mlfqs) {
     sema_up (&lock->semaphore);
-    return ;
+    return;
   }
 
-  struct thread *cur_thread = thread_current ();
+  struct thread *cur_thread = thread_current();
   struct list_elem *e = list_begin(&cur_thread->donations);
 
   while(e != list_end(&cur_thread-> donations)) {
