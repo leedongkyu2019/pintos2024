@@ -173,6 +173,8 @@ thread_create (const char *name, int priority,
 
   ASSERT (function != NULL);
 
+  struct thread *parent = running_thread();
+
   /* Allocate thread. */
   t = palloc_get_page (PAL_ZERO);
   if (t == NULL)
@@ -197,6 +199,11 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
+  t->parent = parent;
+  t->load_sucess = 0;
+  list_push_back(&(parent->child), &(t->child_elem));
+  for(int i=0;i<128;i++)
+      t->fd[i] = NULL;
   /* Add to run queue. */
   thread_unblock (t);
 
@@ -462,6 +469,11 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
+  sema_init(&(t->exit), 0);     
+  sema_init(&(t->load), 0);
+  sema_init(&(t->mem), 0);
+  list_init(&(t->child));
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

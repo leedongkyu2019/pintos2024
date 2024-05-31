@@ -19,8 +19,27 @@
 #include "threads/vaddr.h"
 #include <ctype.h>
 
+struct thread* get_child_process(int pid);
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+
+
+struct thread* get_child_process(int pid){
+
+  // parent에서 list child를 검색해서 return
+  struct list_elem *ptr;
+  struct thread* t = thread_current();
+  struct thread* temp = NULL;
+  
+  for (ptr = list_begin(&(t->child)); ptr != list_end(&(t->child)); ptr = list_next(ptr)){
+    temp = list_entry(ptr, struct thread, child_elem);
+    if(pid==temp->tid){
+      return temp;
+    }
+  }
+
+  return NULL;
+}
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -31,6 +50,7 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
+  struct thread* cur = thread_current();
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -41,8 +61,11 @@ process_execute (const char *file_name)
 
   char *save_ptr;
   char *token = strtok_r(file_name," ",&save_ptr);
+
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (token, PRI_DEFAULT, start_process, fn_copy);
+
+  sema_down(&(cur->load));
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -75,13 +98,17 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
   if (success) {
     argument_stack(parse, count, &if_.esp);
-    hex_dump(if_.esp , if_.esp , PHYS_BASE - if_.esp , true);
+    // hex_dump(if_.esp , if_.esp , PHYS_BASE - if_.esp , true);
   }
+
+  sema_up(&((thread_current()->parent)->load));
+
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!success) {
+    thread_current()->parent->load_sucess = -1;
     thread_exit ();
-
+  }
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -150,7 +177,21 @@ void argument_stack(char **parse, int count, void **esp) {
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  while (1) {}
+  struct list_elem* ptr;
+  struct thread* t = NULL;
+  int exit_status;
+   
+  t = get_child_process((int)child_tid);
+  
+  if(t!=NULL){
+    sema_down(&(t->exit));
+    exit_status = t->exit_status;
+    // remove child from parent's list
+    list_remove(&(t->child_elem));
+    sema_up(&(t->mem));
+    return exit_status;
+  }   
+  
   return -1;
 }
 
@@ -177,6 +218,8 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  sema_up(&(cur->exit));
+  sema_down(&(cur->mem));
 }
 
 /* Sets up the CPU for running user code in the current
