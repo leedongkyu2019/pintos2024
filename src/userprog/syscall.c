@@ -8,37 +8,29 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 
-struct lock filesys_lock;
 
+// from file.c
 struct file 
-  {
+  { 
     struct inode *inode;        /* File's inode. */
     off_t pos;                  /* Current position. */
     bool deny_write;            /* Has file_deny_write() been called? */
   };
 
-
 static void syscall_handler (struct intr_frame *);
 
+struct lock sys_lock;
 void
 syscall_init (void) 
 {
-  lock_init(&filesys_lock);
+  lock_init(&sys_lock);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
 void check_user_address(void* addr){
-
   if(!is_user_vaddr(addr)){
     exit(-1);
   }
-}
-
-void check_kernel_address(void* addr){
-   if(!is_kernel_vaddr(addr)){
-    exit(-1);
-  }
-
 }
 
 static void
@@ -63,9 +55,10 @@ syscall_handler (struct intr_frame *f UNUSED)
       f->eax = wait((pid_t)*(uint32_t *)(f->esp+4));
       break;   
     case SYS_CREATE:
-      for(int i=1;i<=2;i++)
-        check_user_address(f->esp+i*4);
+      check_user_address(f->esp+4);
+      check_user_address(f->esp+8);
       f->eax = create((const char *)*(uint32_t *)(f->esp+4), (unsigned)(*(uint32_t *)(f->esp+8)));
+      break;
     case SYS_REMOVE:
       check_user_address(f->esp+4);
       f->eax = remove((const char *)*(uint32_t *)(f->esp+4));
@@ -79,19 +72,20 @@ syscall_handler (struct intr_frame *f UNUSED)
       f->eax = filesize((int)(*(uint32_t *)(f->esp+4)));      
       break;
     case SYS_READ:
-      for(int i=1;i<=3;i++)
-        check_user_address(f->esp+i*4);
+      check_user_address(f->esp+4);
+      check_user_address(f->esp+8);
+      check_user_address(f->esp+12);
       f->eax = read((int)(*(uint32_t *)(f->esp+4)),  (void*)(*(uint32_t *)(f->esp+8)), (unsigned)(*(uint32_t *)(f->esp+12)));
       break;
     case SYS_WRITE:
-    // 주소에 들어있는 값을 가져오면 된다!! 내일 해결
-      for(int i=1;i<=3;i++)
-        check_user_address(f->esp+i*4);
+      check_user_address(f->esp+4);
+      check_user_address(f->esp+8);
+      check_user_address(f->esp+12);
       f->eax = write((int)(*(uint32_t *)(f->esp+4)),  (void*)(*(uint32_t *)(f->esp+8)), (unsigned)(*(uint32_t *)(f->esp+12)));
       break;
     case SYS_SEEK:
-      for(int i=1;i<=2;i++)
-        check_user_address(f->esp+i*4);
+      check_user_address(f->esp+4);
+      check_user_address(f->esp+8);
       seek((int)(*(uint32_t *)(f->esp+4)), (unsigned)(*(uint32_t *)(f->esp+8)));
       break;
     case SYS_TELL:
@@ -105,156 +99,179 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
 }
 
+// Wait
 int wait(pid_t pid){
-  // Waits for a child process pid and retrieves the child's exit status.
+  // Simply just call process_wait
   return process_wait(pid);
 }
 
-
+//Exit
 void exit(int status){
+  // when a process exits, it should print the exit message
   struct thread *cur = thread_current();
 
   printf("%s: exit(%d)\n", thread_name(), status);
   cur -> exit_status = status;
-  for(int i=3;i<128;i++){
-    if(cur->fd[i]!=NULL){
-      close(i);
+  int i = 3;
+  while (i < 128) {
+    // close all the files, when a process exits
+    if (cur->fd[i] != NULL) {
+        close(i);
     }
-  }  
+    i++;
+  }
   thread_exit();
 }
 
-
+// Write
 int write(int fd, const void *buffer, unsigned size){
-
+  if (buffer == NULL)
+    exit(-1);
+  //check if the buffer is a valid user address
   check_user_address(buffer);
   check_user_address(buffer+size);
 
   struct file* fptr = thread_current()->fd[fd];
-  int return_val = -1;
 
-  if(fd==1){
+  if (fd == 1){
     putbuf(buffer, size);
     return size;
   }
-  else if (fd>2) {
-    if(fptr==NULL)
+  
+  
+  if (fd>2) {
+    if (fptr == NULL)
       exit(-1);
     if (fptr->deny_write) {
       file_deny_write(fptr);
     }
-    lock_acquire(&filesys_lock);
-    return_val = file_write(fptr, buffer, size);
-    lock_release(&filesys_lock);
+    lock_acquire(&sys_lock);
+    int result = file_write(fptr, buffer, size);
+    lock_release(&sys_lock);
+    return result;
   }
-  return return_val;
+  return -1;
 }
 
 
 int read (int fd, void* buffer, unsigned size){
-
   // reads 'size' bytes from the open file 'fd' into 'buffer'
-  int i = -1;
 
-  if(buffer==NULL)
+  if(buffer == NULL)
     exit(-1);
-
+  // check if the buffer is a valid user address
   check_user_address(buffer);
-  check_user_address((void*)((uint32_t)buffer+size));  
+  check_user_address(buffer+size);  
   
-  if (fd==0){
-    for (i = 0; i < size; i++)
-	  {
-	    ((char*)buffer)[i] = input_getc();
-      if(((char*)buffer)[i] =='\0')
-        break;
-	  }
+  if (fd == 0){
+    int i = 0;
+    while (i < size) {
+        ((char*)buffer)[i] = input_getc();
+        if (((char*)buffer)[i] == '\0') {
+            break;
+        }
+        i++;
+    }
     return i;
   }
-  else if (fd>2){
-    if(thread_current()->fd[fd]==NULL){
-      return -1;
+  
+  if (fd>2){
+    struct file* curr_file = thread_current()->fd[fd];
+
+    if(curr_file == NULL){
+      exit(-1);
     }
-    lock_acquire(&filesys_lock);
-    i = file_read(thread_current()->fd[fd], buffer, size);
-    lock_release(&filesys_lock);
+
+    lock_acquire(&sys_lock);
+    int result = file_read(curr_file, buffer, size);
+    lock_release(&sys_lock);
+    return result;
   }
-  return i;
+
+  return -1;
 
 }
 
 void halt(){
+  // Simply just call shutdown_power_off for halt
   shutdown_power_off();
 }
 
 pid_t exec(const char *cmd_line){
+  // Simply just call process_execute for exec
   return process_execute(cmd_line);
 }
 
 bool create (const char *file, unsigned initial_size){
-  if(file==NULL){
+  // Simply just call filesys_create
+  if (file == NULL){
     exit(-1);
   }
   return filesys_create(file, initial_size);
 }
 
 bool remove (const char *file){
-  if(file==NULL)
+  // Simply just call filesys_remove
+  if (file == NULL)
     return false;
   return filesys_remove(file);
 }
 
 int open (const char *file){
-
-  if(file==NULL){
-    return -1;
+  int start = 3;
+  int max = 128;
+  if (file == NULL){
+    exit(-1);
   }
 
-  struct file* f = filesys_open(file);
-  struct thread* t = thread_current();
+  struct file* open_file = filesys_open(file);
+  struct thread* curr = thread_current();
   
-  if(f==NULL){
+  if (open_file == NULL){
     return -1;
   }
 
-  int i;
-  for(i=3;i<128;i++){
-    if(t->fd[i]==NULL){
-      if (strcmp(thread_current()->name, file) == 0) {
-            file_deny_write(f);
-        }   
-      t->fd[i] = f;
-      return i;
-    }
+  int i = start;
+  while (i < max) {
+      if (curr->fd[i] == NULL) {
+          if (strcmp(thread_current()->name, file) == 0) {
+              file_deny_write(open_file);
+          }   
+          curr->fd[i] = open_file;
+          return i;
+      }
+      i++;
   }
 
   return -1;
 }
 
 void close (int fd){
-  if(thread_current()->fd[fd]==NULL)
+  struct file* curr_file = thread_current()->fd[fd];
+
+  if (curr_file == NULL)
     exit(-1);
-  file_close(thread_current()->fd[fd]);
+  file_close(curr_file);
   thread_current()->fd[fd] = NULL;
 }
 
 int filesize (int fd){
-  struct file* f = thread_current()->fd[fd];
-  if(f==NULL)
+  struct file* curr_file = thread_current()->fd[fd];
+  if (curr_file == NULL)
     exit(-1);
-  return file_length(f);
+  return file_length(curr_file);
 }
 
 void seek (int fd, unsigned position){
-  struct file* f = thread_current()->fd[fd];
-  if(f==NULL)
+  struct file* curr_file = thread_current()->fd[fd];
+  if (curr_file == NULL)
     exit(-1);
-  file_seek(f, position);
+  file_seek(curr_file, position);
 }
 
 unsigned tell (int fd){
-  struct file* f = thread_current()->fd[fd];
-  if(f==NULL)
+  struct file* curr_file = thread_current()->fd[fd];
+  if (curr_file == NULL)
     exit(-1);
-  return file_tell(f);
+  return file_tell(curr_file);
 }

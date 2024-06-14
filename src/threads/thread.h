@@ -99,20 +99,17 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 
 #endif
-    // 부모 프로세스 
+   // for project 2
     struct thread* parent;
-    // 자식 프로세스의 종료를 위한
-    struct semaphore exit;
-    // 자식 프로세스의 생성을 위한
-    struct semaphore load;
-    //자식 프로세스의 안정적인 제거를 위한
-    struct semaphore mem;
-    int load_sucess;
-    struct list child;
+    struct semaphore child_sema; // lock for child
+    struct semaphore load_sema; // lock for load
+    struct semaphore mem_sema; // lock for memory access
+    struct list childs;
     struct list_elem child_elem;
     int exit_status;
-    struct file* fd[128];
 
+    struct file* fd[128];
+   // end of project 2
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

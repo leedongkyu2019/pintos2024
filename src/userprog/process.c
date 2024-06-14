@@ -19,23 +19,24 @@
 #include "threads/vaddr.h"
 #include <ctype.h>
 
-struct thread* get_child_process(int pid);
+struct thread* get_child_thread(int pid);
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
 
-struct thread* get_child_process(int pid){
+struct thread* get_child_thread(int cond_tid){
 
-  // parent에서 list child를 검색해서 return
-  struct list_elem *ptr;
-  struct thread* t = thread_current();
-  struct thread* temp = NULL;
-  
-  for (ptr = list_begin(&(t->child)); ptr != list_end(&(t->child)); ptr = list_next(ptr)){
-    temp = list_entry(ptr, struct thread, child_elem);
-    if(pid==temp->tid){
-      return temp;
-    }
+  struct list_elem *elem;
+  struct thread* cur = thread_current();
+  struct thread* child_thread = NULL;
+
+  elem = list_begin(&(cur->childs));
+  while (elem != list_end(&(cur->childs))) {
+      child_thread = list_entry(elem, struct thread, child_elem);
+      if (cond_tid == child_thread->tid) {
+          return child_thread;
+      }
+      elem = list_next(elem);
   }
 
   return NULL;
@@ -49,6 +50,7 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
+  char copy[130], *save_ptr, *token;
   tid_t tid;
   struct thread* cur = thread_current();
 
@@ -59,15 +61,35 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  char *save_ptr;
-  char *token = strtok_r(file_name," ",&save_ptr);
+  // char *save_ptr;
+  // char *token = strtok_r(file_name," ",&save_ptr);
+  // tid = thread_create (token, PRI_DEFAULT, start_process, fn_copy);
 
-  /* Create a new thread to execute FILE_NAME. */
+  // copy file_name
+  strlcpy(copy, file_name, strlen(file_name)+1);
+  token = strtok_r(copy, " ", &save_ptr);
+
+  if (filesys_open(token) == NULL) {
+      return -1;
+  }
+
   tid = thread_create (token, PRI_DEFAULT, start_process, fn_copy);
 
-  sema_down(&(cur->load));
+  sema_down(&(cur->load_sema));
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+  struct list_elem* e;
+  struct thread* t;
+
+  e = list_begin(&thread_current()->childs);
+  while (e != list_end(&thread_current()->childs)) {
+      t = list_entry(e, struct thread, child_elem);
+      if (t->exit_status == -1) {
+          return process_wait(tid);
+      }
+      e = list_next(e);
+  }
+  
   return tid;
 }
 
@@ -101,14 +123,15 @@ start_process (void *file_name_)
     // hex_dump(if_.esp , if_.esp , PHYS_BASE - if_.esp , true);
   }
 
-  sema_up(&((thread_current()->parent)->load));
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
+  sema_up(&((thread_current()->parent)->load_sema));
+
   if (!success) {
-    thread_current()->parent->load_sucess = -1;
-    thread_exit ();
+    exit(-1);
   }
+  
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -120,49 +143,48 @@ start_process (void *file_name_)
 }
 
 void argument_stack(char **parse, int count, void **esp) {
-    int total_bytes = 0;
-    unsigned int arg_ptr_base;
-    unsigned int arg_ptrs[count];
+  int total = 0;
+  unsigned int base;
+  unsigned int ptrs[count];
 
-    // Insert arguments in reverse
-    for (int i = count - 1; i >= 0; i--) {
-        for (int j = strlen(parse[i]); j >= 0; j--) {
-            *esp -= 1;
-            **(char **)esp = parse[i][j];
-            total_bytes++;
-        }
-        arg_ptrs[i] = *(unsigned int *)esp;
-    }
+  int i = count - 1;
+  while (i >= 0) {
+      int j = strlen(parse[i]);
+      while (j >= 0) {
+          *esp -= 1;
+          **(char **)esp = parse[i][j];
+          total++;
+          j--;
+      }
+      ptrs[i] = *(unsigned int *)esp;
+      i--;
+  }
 
-    // Align to word boundary
-    while (total_bytes % 4 != 0) {
-        *esp -= 1;
-        **(uint8_t **)esp = 0;
-        total_bytes++;
-    }
+  while (total % 4 != 0) {
+      *esp -= 1;
+      **(uint8_t **)esp = 0;
+      total++;
+  }
 
-    // Null-terminate the argv array
-    *esp -= sizeof(char *);
-    **(char ***)esp = NULL;
+  *esp -= sizeof(char *);
+  **(char ***)esp = NULL;
 
-    // Insert argument pointers in reverse
-    for (int i = count - 1; i >= 0; i--) {
-        *esp -= sizeof(char *);
-        **(char ***)esp = (char *)arg_ptrs[i];
-    }
+  i = count - 1;
+  while (i >= 0) {
+      *esp -= sizeof(char *);
+      **(char ***)esp = (char *)ptrs[i];
+      i--;
+  }
 
-    // Store the address of argv
-    arg_ptr_base = *(unsigned int *)esp;
-    *esp -= sizeof(char *);
-    **(char ***)esp = (char *)arg_ptr_base;
+  base = *(unsigned int *)esp;
+  *esp -= sizeof(char *);
+  **(char ***)esp = (char *)base;
 
-    // Store argc
-    *esp -= sizeof(int);
-    **(int **)esp = count;
+  *esp -= sizeof(int);
+  **(int **)esp = count;
 
-    // Insert a fake return address
-    *esp -= sizeof(int);
-    **(int **)esp = 0;
+  *esp -= sizeof(int);
+  **(int **)esp = 0;
 }
 
 /* Waits for thread TID to die and returns its exit status.  If
@@ -177,22 +199,19 @@ void argument_stack(char **parse, int count, void **esp) {
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  struct list_elem* ptr;
-  struct thread* t = NULL;
+  struct thread* th = NULL;
   int exit_status;
    
-  t = get_child_process((int)child_tid);
-  
-  if(t!=NULL){
-    sema_down(&(t->exit));
-    exit_status = t->exit_status;
-    // remove child from parent's list
-    list_remove(&(t->child_elem));
-    sema_up(&(t->mem));
-    return exit_status;
-  }   
-  
-  return -1;
+  th = get_child_thread((int)child_tid);
+
+  if (th == NULL)
+    return -1;
+
+  sema_down(&(th->child_sema));
+  exit_status = th->exit_status;
+  list_remove(&(th->child_elem));
+  sema_up(&(th->mem_sema));
+  return exit_status;   
 }
 
 /* Free the current process's resources. */
@@ -218,8 +237,8 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-  sema_up(&(cur->exit));
-  sema_down(&(cur->mem));
+  sema_up(&(cur->child_sema));
+  sema_down(&(cur->mem_sema));
 }
 
 /* Sets up the CPU for running user code in the current
